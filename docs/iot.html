@@ -1,0 +1,167 @@
+<html lang="ja">
+    <head>
+        <meta charset="utf-8">
+        <title>Demo</title>
+    </head>
+    <body>
+        TODO エラ〜メッセージをbotに入れてもらう
+        TODO https://triple-underscore.github.io/deviceorientation-ja.html
+        
+        <div id="app">
+            <p>残り時間　{{counterMax-counter}}</p>
+            <p>残り時間非表示フラグ　{{showCounter}}</p>
+            <p>デバイスID：テストモードなので固定　　{{deviceId}}</p>
+            
+            <p>x:{{accelerationIncludingGravity.x}}</p>
+            <p>y:{{accelerationIncludingGravity.y}}</p>
+            <p>z:{{accelerationIncludingGravity.z}}</p>
+            
+            
+            <button @click="deviceMotionRequestAuthenticate">角速度センサーを開始</button>
+            <button @click="deviceMotionRequestDelete">角速度センサーを停止する</button>
+
+            
+            <button @click="connectClient">MQTTサーバに接続する</button>
+            <button @click="publishtest">publishtest</button>
+                
+        
+        </div>
+        <script src="./mqttws31.js" type="text/javascript"></script>
+        <script src="https://unpkg.com/vue@3.0.2/dist/vue.global.js"></script>
+        <script>
+            let client;
+            Vue.createApp({
+                data() {
+                    return {
+                        accelerationIncludingGravity: {"x":"0.0","y":"0.0","z":"0.0"},
+                        counter:0,
+                        counterMax:10,
+                        showCounter:false,
+                        
+                      isConnect:false,
+                      loadingIot:false,
+//                      deviceId:"",
+                      deviceId:"ae90936188e6",
+                        
+                      topic:"iot-2/evt/status/fmt/json",
+                      serverURL:"quickstart.messaging.internetofthings.ibmcloud.com",
+                      serverPort:443,
+                      deviceType:"MyDevice"
+                        
+                    }
+                },
+                methods: {
+                    // windowのイベントリスナーがイベントをフックして dataに表示値を設定する
+                    showEvent(){
+                        if (!event.accelerationIncludingGravity) {
+                            alert('[003]');
+                            return;
+                        }
+                        this.accelerationIncludingGravity = event.accelerationIncludingGravity;
+                        this.publish();
+                    
+                    },
+                    deviceMotionRequestAuthenticate() {
+                        
+                        //ループカウンターを初期化
+                        this.counter=0;
+                        this.showCounter=true;
+
+                        //MQTT接続
+                        this.connectClient();
+                        
+                        // androidの場合は、requestPermission不要
+                        if ( navigator.userAgent.indexOf('Android') > 0 ){
+                            window.addEventListener("devicemotion", this.showEvent);
+
+                        // iPhone,iPadの場合は、requestPermissionが必要
+                        } else if ( navigator.userAgent.indexOf('iPhone') > 0 || navigator.userAgent.indexOf('iPad') > 0){
+                            //　requestPermissionが存在する = iPhone or iPad
+                            if (DeviceMotionEvent.requestPermission) {
+                              DeviceMotionEvent.requestPermission()
+                                .then(permissionState => {
+                                  if (permissionState === 'granted') {
+                                      window.addEventListener("devicemotion", this.showEvent);
+                                  } else {
+                                      alert("[004]")
+                                  }
+                                })
+                                .catch(console.error);
+                            } else {
+                              alert('[001]')
+                            }                            
+                            
+                        } else {
+                            alert("[002]")
+                        }
+                    },                    
+                    deviceMotionRequestDelete(){
+                        window.removeEventListener("devicemotion", this.showEvent);
+                    },                    
+                    getDeviceId(){
+                      var did = '';
+                      var hx = '0123456789abcdef';
+                      for( var i = 0; i < 12; i ++ ){
+                        var n = Math.floor( Math.random() * 16 );
+                        if( n == 16 ){ n = 15; }
+                        c = hx.charAt( n );
+                        did += c;
+                      }
+                      this.deviceId=did;
+                    },
+
+                    connectClient(){
+                      this.loadingIot=true;
+                      var clientID = "d:quickstart:"+this.deviceType+":" + this.deviceId;
+                      client = new Messaging.Client(this.serverURL, this.serverPort, clientID );
+                      client.onConnectionLost = this.onConnectionLost;
+                      client.connect({onSuccess: this.onSuccess,useSSL: true});
+                    },
+                    
+//                    disconnectClient(){
+//                        client.disconnect();
+//                    },
+                    onSuccess(){
+                      console.log("onSuccess");
+                      this.isConnect=true;
+                      this.loadingIot=false;
+                    },
+                    onConnectionLost() {
+                      console.log("lost");
+                      this.isConnect=false;
+                    },
+                    publish(){
+                      var message = new Messaging.Message( JSON.stringify({"d":{"name":this.deviceId,"x":this.accelerationIncludingGravity.x,"y":this.accelerationIncludingGravity.y,"z":this.accelerationIncludingGravity.z}}) );
+                      message.destinationName = this.topic;
+                      client.send( message );
+                    },                    
+                    publishtest(){
+                      var message = new Messaging.Message( JSON.stringify({"d":{"name":this.deviceId,"x":"0.00010","y":"0.0002","z":"0.00004"}}) );
+                      message.destinationName = this.topic;
+                      client.send( message );
+                    },                    
+                },
+                beforeUnmount () {
+                    this.deviceMotionRequestDelete();
+                },
+                mounted() {
+                    //this.getDeviceId();
+                    setInterval(() => {
+                      this.counter++
+                    }, 1000);
+                },
+                watch: {
+                    counter(val){
+                        //カウンターが最大値まで行ったらイベントを削除する。
+                        if (val > this.counterMax) {
+                            this.counter=0;
+                            this.showCounter=false;
+                            this.deviceMotionRequestDelete();
+                        }
+                    }
+                }
+                
+            }).mount('#app');
+        </script>
+    </body>
+</html>
